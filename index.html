@@ -301,14 +301,14 @@ function togglePanel(){
 function openPanel(){
     panelOpen=true;
     document.getElementById('panel').classList.add('open');
-    document.getElementById('map').style.height='calc(50vh - 88px)';
+    if(window.innerWidth<769) document.getElementById('map').style.height='calc(50vh - 88px)';
     buildPanel();
     setTimeout(function(){map.autoResize();},350);
 }
 function closePanel(){
     panelOpen=false;
     document.getElementById('panel').classList.remove('open');
-    document.getElementById('map').style.height='calc(100vh - 88px)';
+    if(window.innerWidth<769) document.getElementById('map').style.height='calc(100vh - 88px)';
     setTimeout(function(){map.autoResize();},350);
 }
 function showAll(){
