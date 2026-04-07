@@ -79,8 +79,10 @@ body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:var(--bg);}
     .panel-toggle{left:auto;right:0;width:380px;}
 }
 
-.iw{padding:10px;min-width:200px;font-size:13px;line-height:1.5;}
-.iw b{font-size:14px;}
+.iw{padding:10px;min-width:200px;font-size:13px;line-height:1.5;position:relative;}
+.iw b{font-size:14px;padding-right:20px;display:block;}
+.iw-close{position:absolute;top:6px;right:6px;width:24px;height:24px;border:none;background:#eee;border-radius:50%;font-size:16px;line-height:24px;text-align:center;cursor:pointer;color:#666;padding:0;}
+.iw-close:hover{background:#ddd;color:#333;}
 .iw .iw-acts{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;}
 .iw .iw-acts a{padding:5px 8px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;color:#fff;}
 </style>
@@ -131,6 +133,7 @@ function init(){
         scaleControl:false,
         mapDataControl:false
     });
+    naver.maps.Event.addListener(map,'click',function(){if(curIW){curIW.close();curIW=null;}});
     var sel=document.getElementById('guSel');
     G.forEach(function(g){var o=document.createElement('option');o.value=g;o.textContent=g;sel.appendChild(o);});
     sel.onchange=function(){curGu=this.value;activeZones=[1,2,3,4];fMuin=false;fNoSom=false;panelZone=1;render();};
@@ -199,7 +202,7 @@ function render(){
         });
         var mb=isMuin?'<span style="background:#e74c3c;color:#fff;padding:1px 5px;border-radius:8px;font-size:10px;">무인</span> ':'';
         var sb=noSom?'<span style="background:#333;color:#fff;padding:1px 5px;border-radius:8px;font-size:10px;">미신고</span> ':'';
-        var ic='<div class="iw"><b>'+s.n+'</b><br>'+mb+sb
+        var ic='<div class="iw"><button class="iw-close" onclick="if(curIW){curIW.close();curIW=null;}">✕</button><b>'+s.n+'</b><br>'+mb+sb
             +'<span style="background:'+color+';color:#fff;padding:1px 5px;border-radius:8px;font-size:10px;">'+s.z+'구역 #'+s.o+'</span><br>'
             +'<span style="color:#888;font-size:12px;">'+s.a+'</span><br>'
             +(s.p?'<span style="font-size:12px;">📞 '+s.p+'</span><br>':'')
@@ -357,4 +360,4 @@ console.log('[모니터링지도] naver 객체: '+(typeof naver!=='undefined'?'O
 console.log('[모니터링지도] 매장 수: '+S.length);
 </script>
 </body>
-</html>
+    </html>
