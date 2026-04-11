@@ -55,7 +55,7 @@ body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:var(--bg);}
 .ptab.z3{background:#f0fff0;color:var(--z3);} .ptab.z3.active{background:var(--z3);color:#fff;}
 .ptab.z4{background:#fff8f0;color:var(--z4);} .ptab.z4.active{background:var(--z4);color:#fff;}
 
-.panel-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0;}
+.panel-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0 0 calc(env(safe-area-inset-bottom,0px) + 24px) 0;overscroll-behavior:contain;}
 .store-card{display:flex;align-items:flex-start;gap:10px;padding:12px 16px;border-bottom:1px solid #f0f0f0;cursor:pointer;transition:background .15s;}
 .store-card:active{background:#f5f5f5;}
 .store-num{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;flex-shrink:0;margin-top:2px;}
