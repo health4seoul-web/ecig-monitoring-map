@@ -84,6 +84,22 @@ body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:var(--bg);}
 .iw b{font-size:14px;}
 .iw .iw-acts{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap;}
 .iw .iw-acts a{padding:5px 8px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;color:#fff;}
+.gps-btn{position:fixed;right:12px;bottom:100px;z-index:150;width:46px;height:46px;border-radius:50%;background:#fff;border:1px solid #ddd;box-shadow:0 2px 8px rgba(0,0,0,.18);display:flex;align-items:center;justify-content:center;font-size:22px;cursor:pointer;color:#1a73e8;transition:all .2s;}
+.gps-btn:active{transform:scale(.92);}
+.gps-btn.loading{background:#1a73e8;color:#fff;}
+.gps-btn.active{background:#1a73e8;color:#fff;}
+.marker-wrap{position:relative;}
+.visit-tick{position:absolute;top:-3px;right:-3px;width:14px;height:14px;border-radius:50%;background:#22c55e;color:#fff;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff;box-shadow:0 1px 2px rgba(0,0,0,.3);line-height:1;}
+.marker-visited{opacity:.45;filter:saturate(.4);}
+.iw .iw-acts a.btn-visit{background:#22c55e;}
+.iw .iw-acts a.btn-visit.done{background:#9ca3af;}
+.badge-visit{background:#22c55e;}
+.store-card.visited{opacity:.55;}
+.store-card.visited .store-name{text-decoration:line-through;}
+.chip.all-chip{background:#fff;color:#444;border-color:#bbb;}
+.chip.all-chip.active{background:#444;border-color:#444;color:#fff;}
+.chip.visit-hide{background:#f0fdf4;border-color:#bbf7d0;color:#16a34a;}
+.chip.visit-hide.active{background:#16a34a;border-color:#16a34a;color:#fff;}
 </style>
 </head>
 <body>
@@ -96,6 +112,7 @@ body{font-family:-apple-system,'Malgun Gothic',sans-serif;background:var(--bg);}
 <div class="zone-chips" id="chips"></div>
 
 <div id="map"></div>
+<button id="gpsBtn" class="gps-btn" title="내 위치" onclick="locateMe()">⌖</button>
 <div id="mapStatus" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:100;background:#fff;padding:24px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.15);text-align:center;font-size:14px;color:#333;line-height:1.8;max-width:90%;"></div>
 
 <div class="panel-toggle" id="panelToggle" onclick="togglePanel()">
@@ -117,7 +134,55 @@ var S=[{"n": "[유예]전담플레이 홍대점", "g": "마포구", "z": 3, "o":
 var G=["강남구", "강동구", "강북구", "강서구", "관악구", "광진구", "구로구", "금천구", "노원구", "도봉구", "동대문구", "동작구", "마포구", "서대문구", "서초구", "성동구", "성북구", "송파구", "양천구", "영등포구", "용산구", "은평구", "종로구", "중구", "중랑구"];
 var ZC={"1":"#FF4444","2":"#4488FF","3":"#44BB44","4":"#FF8800"};
 var map,markers=[],curIW=null,curGu='',activeZones=[1,2,3,4],fMuin=false,fNoSom=false,panelOpen=false,panelZone=1;
+var visited={},hideVisited=false,userMarker=null,suspendHash=false;
+try{visited=JSON.parse(localStorage.getItem('visited_v1')||'{}');}catch(e){visited={};}
 function closeIW(e){if(e){e.stopPropagation();e.preventDefault();}if(curIW){curIW.close();curIW=null;}}
+function storeKey(s){return s.g+'|'+s.n+'|'+s.la.toFixed(5)+'|'+s.lo.toFixed(5);}
+function isVisited(s){return !!visited[storeKey(s)];}
+function toggleVisited(k){if(visited[k])delete visited[k];else visited[k]=Date.now();
+ try{localStorage.setItem('visited_v1',JSON.stringify(visited));}catch(e){}
+ if(curIW){curIW.close();curIW=null;}render();}
+function clearAllVisited(){if(!confirm('현재까지 체크한 방문 기록을 모두 초기화할까요?'))return;
+ visited={};try{localStorage.removeItem('visited_v1');}catch(e){}render();}
+function spreadOverlap(arr){
+ var groups={};arr.forEach(function(s){var k=s.la.toFixed(4)+','+s.lo.toFixed(4);
+  if(!groups[k])groups[k]=[];groups[k].push(s);});
+ var out=[];Object.keys(groups).forEach(function(k){var g=groups[k];
+  if(g.length===1){out.push({s:g[0],dla:g[0].la,dlo:g[0].lo});return;}
+  var n=g.length,r=0.00009;
+  for(var i=0;i<n;i++){var ang=(2*Math.PI*i)/n-Math.PI/2;
+   out.push({s:g[i],dla:g[i].la+r*Math.sin(ang),dlo:g[i].lo+r*Math.cos(ang)});}});
+ return out;}
+function updateHash(){if(suspendHash)return;
+ var p=[];if(curGu)p.push('gu='+encodeURIComponent(curGu));
+ if(activeZones.length<4)p.push('z='+activeZones.join(','));
+ if(fMuin)p.push('m=1');if(fNoSom)p.push('n=1');if(hideVisited)p.push('v=h');
+ var h=p.length?'#'+p.join('&'):'#';
+ if(location.hash!==h)history.replaceState(null,'',h);}
+function parseHash(){var h=location.hash.replace(/^#/,'');if(!h)return false;
+ var changed=false;h.split('&').forEach(function(kv){var p=kv.split('=');
+  if(p[0]==='gu'){curGu=decodeURIComponent(p[1]||'');changed=true;}
+  else if(p[0]==='z'){var zs=(p[1]||'').split(',').map(function(x){return parseInt(x);}).filter(function(x){return x>=1&&x<=4;});
+   if(zs.length){activeZones=zs;panelZone=zs[0];changed=true;}}
+  else if(p[0]==='m'){fMuin=true;changed=true;}
+  else if(p[0]==='n'){fNoSom=true;changed=true;}
+  else if(p[0]==='v'&&p[1]==='h'){hideVisited=true;changed=true;}});
+ return changed;}
+function locateMe(){
+ if(!navigator.geolocation){alert('이 브라우저는 위치 기능을 지원하지 않습니다.');return;}
+ var btn=document.getElementById('gpsBtn');btn.classList.add('loading');
+ navigator.geolocation.getCurrentPosition(function(pos){
+  var la=pos.coords.latitude,lo=pos.coords.longitude;
+  if(userMarker)userMarker.setMap(null);
+  var ic='<div style="width:20px;height:20px;border-radius:50%;background:#1a73e8;border:3px solid #fff;box-shadow:0 0 0 3px rgba(26,115,232,.35),0 2px 6px rgba(0,0,0,.3);"></div>';
+  userMarker=new naver.maps.Marker({position:new naver.maps.LatLng(la,lo),map:map,zIndex:1000,
+   icon:{content:ic,anchor:new naver.maps.Point(13,13)}});
+  map.setCenter(new naver.maps.LatLng(la,lo));
+  if(map.getZoom()<15)map.setZoom(16);
+  btn.classList.remove('loading');btn.classList.add('active');
+ },function(err){btn.classList.remove('loading');
+  alert('위치를 가져올 수 없습니다.\n('+err.message+')');},
+ {enableHighAccuracy:true,timeout:10000,maximumAge:30000});}
 var isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 function naviUrl(lat,lng,name){
     if(isMobile){return 'nmap://route/walk?dlat='+lat+'&dlng='+lng+'&dname='+encodeURIComponent(name)+'&appname=monitoring';}
@@ -135,8 +200,18 @@ function init(){
     });
     var sel=document.getElementById('guSel');
     G.forEach(function(g){var o=document.createElement('option');o.value=g;o.textContent=g;sel.appendChild(o);});
-    sel.onchange=function(){curGu=this.value;activeZones=[1,2,3,4];fMuin=false;fNoSom=false;panelZone=1;render();};
-    showAll();
+    sel.onchange=function(){curGu=this.value;activeZones=[1,2,3,4];fMuin=false;fNoSom=false;panelZone=1;hideVisited=false;render();};
+    // restore from URL hash
+    suspendHash=true;
+    var hadHash=parseHash();
+    suspendHash=false;
+    if(hadHash&&curGu){sel.value=curGu;render();}
+    else{showAll();}
+    window.addEventListener('hashchange',function(){
+        suspendHash=true;parseHash();suspendHash=false;
+        var s=document.getElementById('guSel');if(s)s.value=curGu;
+        render();
+    });
 }
 
 function buildChips(){
@@ -144,18 +219,24 @@ function buildChips(){
     c.innerHTML='';
     if(!curGu){c.innerHTML='<span style="font-size:12px;color:#999;padding:4px;">자치구를 선택하세요</span>';return;}
     var guS=S.filter(function(s){return s.g===curGu;});
+    // 전체 chip
+    var allCh=document.createElement('div');
+    allCh.className='chip all-chip'+(activeZones.length===4?' active':'');
+    allCh.innerHTML='전체 <span class="cnt">'+guS.length+'</span>';
+    allCh.onclick=function(){activeZones=[1,2,3,4];render();};
+    c.appendChild(allCh);
     for(var z=1;z<=4;z++){
         var cnt=guS.filter(function(s){return s.z===z;}).length;
         if(cnt===0) continue;
         var ch=document.createElement('div');
-        ch.className='chip z'+z+(activeZones.indexOf(z)>=0?' active':'');
+        var on=(activeZones.length===1&&activeZones[0]===z);
+        ch.className='chip z'+z+(on?' active':'');
         ch.innerHTML=z+'구역 <span class="cnt">'+cnt+'</span>';
         ch.dataset.zone=z;
         ch.onclick=function(){
             var zn=parseInt(this.dataset.zone);
-            // single-select: click a zone → only that zone; click active → show all
             if(activeZones.length===1&&activeZones[0]===zn){activeZones=[1,2,3,4];}
-            else{activeZones=[zn];}
+            else{activeZones=[zn];panelZone=zn;}
             render();
         };
         c.appendChild(ch);
@@ -170,6 +251,11 @@ function buildChips(){
     fs.textContent='미신고만';
     fs.onclick=function(){fNoSom=!fNoSom;render();};
     c.appendChild(fs);
+    var fv=document.createElement('div');
+    fv.className='chip visit-hide'+(hideVisited?' active':'');
+    fv.innerHTML=(hideVisited?'✓ 방문완료 숨김':'방문완료 숨기기');
+    fv.onclick=function(){hideVisited=!hideVisited;render();};
+    c.appendChild(fv);
 }
 
 function getFiltered(){
@@ -178,6 +264,7 @@ function getFiltered(){
         if(curGu&&activeZones.indexOf(s.z)<0)return false;
         if(fMuin&&s.m!=='O')return false;
         if(fNoSom&&s.s!=='X')return false;
+        if(hideVisited&&isVisited(s))return false;
         return true;
     });
 }
@@ -187,26 +274,38 @@ function render(){
     markers=[];
     if(curIW){curIW.close();curIW=null;}
     buildChips();
+    updateHash();
     var filtered=getFiltered();
+    var spread=spreadOverlap(filtered);
     var bounds=new naver.maps.LatLngBounds();
 
-    filtered.forEach(function(s){
+    spread.forEach(function(item){
+        var s=item.s;
         var color=ZC[s.z]||'#999';
-        var isMuin=s.m==='O',noSom=s.s==='X';
+        var isMuin=s.m==='O',noSom=s.s==='X',visit=isVisited(s);
         var sz=isMuin?30:24,fs=isMuin?14:11;
-        var iconHtml='<div style="width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+';border:2px solid '+(noSom?'#000':'#fff')+';box-shadow:0 1px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:'+fs+'px;color:#fff;font-weight:700;">'+s.o+'</div>';
+        var coreStyle='width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+';border:2px solid '+(noSom?'#000':'#fff')+';box-shadow:0 1px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:'+fs+'px;color:#fff;font-weight:700;';
+        var visitClass=visit?' marker-visited':'';
+        var tick=visit?'<div class="visit-tick">✓</div>':'';
+        var iconHtml='<div class="marker-wrap'+visitClass+'"><div style="'+coreStyle+'">'+s.o+'</div>'+tick+'</div>';
         var mk=new naver.maps.Marker({
-            position:new naver.maps.LatLng(s.la,s.lo),
+            position:new naver.maps.LatLng(item.dla,item.dlo),
             map:map,
             icon:{content:iconHtml,anchor:new naver.maps.Point(sz/2,sz/2)}
         });
         var mb=isMuin?'<span style="background:#e74c3c;color:#fff;padding:1px 5px;border-radius:8px;font-size:10px;">무인</span> ':'';
         var sb=noSom?'<span style="background:#333;color:#fff;padding:1px 5px;border-radius:8px;font-size:10px;">미신고</span> ':'';
-        var ic='<div class="iw"><button class="iw-close" onclick="closeIW(event)">×</button><b>'+s.n+'</b><br>'+mb+sb
+        var vb=visit?'<span style="background:#22c55e;color:#fff;padding:1px 5px;border-radius:8px;font-size:10px;">✓ 방문</span> ':'';
+        var k=storeKey(s).replace(/"/g,'&quot;').replace(/'/g,"\\'");
+        var visitBtn=visit
+          ? '<a href="#" class="btn-visit done" onclick="toggleVisited(\''+k+'\');return false;">방문 취소</a>'
+          : '<a href="#" class="btn-visit" onclick="toggleVisited(\''+k+'\');return false;">방문 체크</a>';
+        var ic='<div class="iw"><button class="iw-close" onclick="closeIW(event)">×</button><b>'+s.n+'</b><br>'+mb+sb+vb
             +'<span style="background:'+color+';color:#fff;padding:1px 5px;border-radius:8px;font-size:10px;">'+s.z+'구역 #'+s.o+'</span><br>'
             +'<span style="color:#888;font-size:12px;">'+s.a+'</span><br>'
             +(s.p?'<span style="font-size:12px;">📞 '+s.p+'</span><br>':'')
             +'<div class="iw-acts">'
+            +visitBtn
             +'<a href="'+s.nu+'" target="_blank" style="background:#03c75a;">플레이스</a>'
             +'<a href="'+naviUrl(s.la,s.lo,s.n)+'" target="_blank" style="background:#1a73e8;">길찾기</a>'
             +(s.p?'<a href="tel:'+s.p+'" style="background:#666;">전화</a>':'')
@@ -217,8 +316,9 @@ function render(){
             iw.open(map,mk);
             curIW=iw;
         });
+        mk._storeKey=storeKey(s);
         markers.push(mk);
-        bounds.extend(new naver.maps.LatLng(s.la,s.lo));
+        bounds.extend(new naver.maps.LatLng(item.dla,item.dlo));
     });
 
     if(filtered.length>0){
@@ -231,7 +331,8 @@ function render(){
         var total=filtered.length;
         var mc=filtered.filter(function(s){return s.m==='O';}).length;
         var nc=filtered.filter(function(s){return s.s==='X';}).length;
-        document.getElementById('toggleSummary').innerHTML='<span>'+curGu+' <b>'+total+'</b>개</span><span>무인 '+mc+' | 미신고 '+nc+'</span>';
+        var vc=filtered.filter(function(s){return isVisited(s);}).length;
+        document.getElementById('toggleSummary').innerHTML='<span>'+curGu+' <b>'+total+'</b>개 (✓'+vc+')</span><span>무인 '+mc+' | 미신고 '+nc+'</span>';
         if(panelOpen) buildPanel();
     } else {
         tog.style.display='none';
@@ -243,6 +344,8 @@ function buildPanel(){
     var tabs=document.getElementById('panelTabs');
     tabs.innerHTML='';
     var guS=S.filter(function(s){return s.g===curGu;});
+    // sync panelZone with single-select chip
+    if(activeZones.length===1)panelZone=activeZones[0];
     var hasZone=false;
     for(var z=1;z<=4;z++){
         var cnt=guS.filter(function(s){return s.z===z;}).length;
@@ -252,22 +355,31 @@ function buildPanel(){
         t.className='ptab z'+z+(panelZone===z?' active':'');
         t.textContent=z+'구역 ('+cnt+')';
         t.dataset.zone=z;
-        t.onclick=function(){panelZone=parseInt(this.dataset.zone);buildPanel();};
+        t.onclick=function(){
+            var zn=parseInt(this.dataset.zone);
+            panelZone=zn;activeZones=[zn];
+            render();
+        };
         tabs.appendChild(t);
     }
     var zS=guS.filter(function(s){return s.z===panelZone;}).sort(function(a,b){return a.o-b.o;});
+    if(hideVisited)zS=zS.filter(function(s){return !isVisited(s);});
     var mc=zS.filter(function(s){return s.m==='O';}).length;
     var nc=zS.filter(function(s){return s.s==='X';}).length;
-    document.getElementById('statsRow').innerHTML='<span><span class="stats-dot" style="background:'+ZC[panelZone]+'"></span>'+panelZone+'구역</span><span>총 '+zS.length+'개</span><span>무인 '+mc+'</span><span>미신고 '+nc+'</span>';
+    var vc=zS.filter(function(s){return isVisited(s);}).length;
+    document.getElementById('statsRow').innerHTML='<span><span class="stats-dot" style="background:'+ZC[panelZone]+'"></span>'+panelZone+'구역</span><span>총 '+zS.length+'개</span><span>무인 '+mc+'</span><span>미신고 '+nc+'</span><span>✓ '+vc+'</span>';
     
     var body=document.getElementById('panelBody');
     body.innerHTML='';
     zS.forEach(function(s){
         var card=document.createElement('div');
-        card.className='store-card';
+        var visit=isVisited(s);
+        card.className='store-card'+(visit?' visited':'');
         var badges='';
         if(s.m==='O') badges+='<span class="badge badge-muin">무인</span>';
         if(s.s==='X') badges+='<span class="badge badge-nosom">미신고</span>';
+        if(visit) badges+='<span class="badge badge-visit">✓</span>';
+        var k=storeKey(s).replace(/'/g,"\\'");
         card.innerHTML='<div class="store-num" style="background:'+ZC[s.z]+'">'+s.o+'</div>'
             +'<div class="store-info">'
             +'<div class="store-name">'+s.n+' '+badges+'</div>'
@@ -276,17 +388,20 @@ function buildPanel(){
             +'<a class="btn-place" href="'+s.nu+'" target="_blank">플레이스</a>'
             +'<a class="btn-navi" href="'+naviUrl(s.la,s.lo,s.n)+'" target="_blank">길찾기</a>'
             +(s.p?'<a class="btn-call" href="tel:'+s.p+'">📞전화</a>':'')
+            +'<a href="#" data-vk="'+k+'" style="padding:5px 10px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;color:#fff;background:'+(visit?'#9ca3af':'#22c55e')+';">'+(visit?'방문 취소':'방문 체크')+'</a>'
             +'</div></div>';
         (function(st){
             card.onclick=function(e){
-                if(e.target.tagName==='A') return;
+                if(e.target.tagName==='A'){
+                    var vk=e.target.getAttribute('data-vk');
+                    if(vk){e.preventDefault();toggleVisited(vk);return;}
+                    return;
+                }
                 map.setCenter(new naver.maps.LatLng(st.la,st.lo));
                 map.setZoom(17);
+                var sk=storeKey(st);
                 markers.forEach(function(mk){
-                    var pos=mk.getPosition();
-                    if(Math.abs(pos.lat()-st.la)<0.0001&&Math.abs(pos.lng()-st.lo)<0.0001){
-                        naver.maps.Event.trigger(mk,'click');
-                    }
+                    if(mk._storeKey===sk){naver.maps.Event.trigger(mk,'click');}
                 });
             };
         })(s);
@@ -312,7 +427,9 @@ function closePanel(){
     setTimeout(function(){map.autoResize();},350);
 }
 function showAll(){
-    curGu='';activeZones=[1,2,3,4];fMuin=false;fNoSom=false;
+    curGu='';activeZones=[1,2,3,4];fMuin=false;fNoSom=false;hideVisited=false;
+    if(userMarker){userMarker.setMap(null);userMarker=null;}
+    var btn=document.getElementById('gpsBtn');if(btn)btn.classList.remove('active');
     document.getElementById('guSel').value='';
     closePanel();
     render();
