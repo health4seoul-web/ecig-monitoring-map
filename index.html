@@ -327,7 +327,7 @@ function render(){
 
     var tog=document.getElementById('panelToggle');
     if(curGu){
-        tog.style.display='block';
+        tog.style.display=panelOpen?'none':'block';
         var total=filtered.length;
         var mc=filtered.filter(function(s){return s.m==='O';}).length;
         var nc=filtered.filter(function(s){return s.s==='X';}).length;
@@ -416,6 +416,7 @@ function togglePanel(){
 function openPanel(){
     panelOpen=true;
     document.getElementById('panel').classList.add('open');
+    document.getElementById('panelToggle').style.display='none';
     document.getElementById('map').style.height='calc(50vh - 88px)';
     buildPanel();
     setTimeout(function(){map.autoResize();},350);
@@ -423,6 +424,7 @@ function openPanel(){
 function closePanel(){
     panelOpen=false;
     document.getElementById('panel').classList.remove('open');
+    if(curGu)document.getElementById('panelToggle').style.display='block';
     document.getElementById('map').style.height='calc(100vh - 88px)';
     setTimeout(function(){map.autoResize();},350);
 }
