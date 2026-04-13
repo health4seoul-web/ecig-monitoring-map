@@ -149,7 +149,7 @@ function spreadOverlap(arr){
   if(!groups[k])groups[k]=[];groups[k].push(s);});
  var out=[];Object.keys(groups).forEach(function(k){var g=groups[k];
   if(g.length===1){out.push({s:g[0],dla:g[0].la,dlo:g[0].lo});return;}
-  var n=g.length,r=0.00009;
+  var n=g.length,r=0.00015;if(n>4)r=0.0002;if(n>8)r=0.00025;
   for(var i=0;i<n;i++){var ang=(2*Math.PI*i)/n-Math.PI/2;
    out.push({s:g[i],dla:g[i].la+r*Math.sin(ang),dlo:g[i].lo+r*Math.cos(ang)});}});
  return out;}
@@ -183,6 +183,21 @@ function locateMe(){
  },function(err){btn.classList.remove('loading');
   alert('위치를 가져올 수 없습니다.\n('+err.message+')');},
  {enableHighAccuracy:true,timeout:10000,maximumAge:30000});}
+function renderMarkerSizes(){
+ if(!map||!markers.length)return;
+ var zm=map.getZoom(),scale=zm>=16?1:zm>=14?0.82:0.65;
+ var filtered=getFiltered();var byKey={};filtered.forEach(function(s){byKey[storeKey(s)]=s;});
+ markers.forEach(function(mk){
+  var s=byKey[mk._storeKey];if(!s)return;
+  var isMuin=s.m==='O',noSom=s.s==='X',visit=isVisited(s);
+  var sz=Math.round((isMuin?30:24)*scale),fs=Math.round((isMuin?14:11)*scale);
+  var coreStyle='width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+(ZC[s.z]||'#999')+';border:2px solid '+(noSom?'#000':'#fff')+';box-shadow:0 1px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:'+fs+'px;color:#fff;font-weight:700;';
+  var visitClass=visit?' marker-visited':'';
+  var tick=visit?'<div class="visit-tick">✓</div>':'';
+  var iconHtml='<div class="marker-wrap'+visitClass+'"><div style="'+coreStyle+'">'+s.o+'</div>'+tick+'</div>';
+  mk.setIcon({content:iconHtml,anchor:new naver.maps.Point(sz/2,sz/2)});
+ });
+}
 var isMobile=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 function naviUrl(lat,lng,name){
     if(isMobile){return 'nmap://route/walk?dlat='+lat+'&dlng='+lng+'&dname='+encodeURIComponent(name)+'&appname=monitoring';}
@@ -201,6 +216,13 @@ function init(){
     var sel=document.getElementById('guSel');
     G.forEach(function(g){var o=document.createElement('option');o.value=g;o.textContent=g;sel.appendChild(o);});
     sel.onchange=function(){curGu=this.value;activeZones=[1,2,3,4];fMuin=false;fNoSom=false;panelZone=1;hideVisited=false;render();};
+    // 줌 변경 시 마커 크기 재조절 (fitBounds 직후 리렌더 방지용 debounce)
+    var zoomTimer=null,lastZoom=12;
+    naver.maps.Event.addListener(map,'zoom_changed',function(z){
+        if(Math.abs(z-lastZoom)<2&&zoomTimer)return;
+        lastZoom=z;clearTimeout(zoomTimer);
+        zoomTimer=setTimeout(function(){renderMarkerSizes();},200);
+    });
     // restore from URL hash
     suspendHash=true;
     var hadHash=parseHash();
@@ -283,7 +305,8 @@ function render(){
         var s=item.s;
         var color=ZC[s.z]||'#999';
         var isMuin=s.m==='O',noSom=s.s==='X',visit=isVisited(s);
-        var sz=isMuin?30:24,fs=isMuin?14:11;
+        var zm=map.getZoom(),scale=zm>=16?1:zm>=14?0.82:0.65;
+        var sz=Math.round((isMuin?30:24)*scale),fs=Math.round((isMuin?14:11)*scale);
         var coreStyle='width:'+sz+'px;height:'+sz+'px;border-radius:50%;background:'+color+';border:2px solid '+(noSom?'#000':'#fff')+';box-shadow:0 1px 4px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:'+fs+'px;color:#fff;font-weight:700;';
         var visitClass=visit?' marker-visited':'';
         var tick=visit?'<div class="visit-tick">✓</div>':'';
