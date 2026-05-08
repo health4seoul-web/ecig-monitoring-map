@@ -448,7 +448,12 @@ function openPanel(){
     panelOpen=true;
     document.getElementById('panel').classList.add('open');
     document.getElementById('panelToggle').style.display='none';
-    document.getElementById('map').style.height='calc(50vh - 88px)';
+    // 모바일(<769px)에서만 지도 높이 축소. 데스크톱은 패널이 우측 380px이므로 지도 높이 그대로
+    if(window.innerWidth<769){
+        document.getElementById('map').style.height='calc(50vh - 88px)';
+    }else{
+        document.getElementById('map').style.height='calc(100vh - 88px)';
+    }
     buildPanel();
     setTimeout(function(){map.autoResize();},350);
 }
